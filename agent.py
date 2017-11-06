@@ -3,39 +3,39 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import time
+from datetime import datetime, date, time
 import pickle
 import warnings
+from QMemory import QState, QMemory, Track
+
 warnings.filterwarnings("ignore")
 
 global team_name, folder, env_name
-team_name = 'ml_team # N' # TODO: change your team name
+team_name = 'ml_team # N'  # TODO: change your team name
 folder = 'tetris_race_qlearning'
-env_name = 'TetrisRace-v0' # do not change this
+env_name = 'TetrisRace-v0'  # do not change this
 
 
 # todo methods:
-#TetrisRaceQLearningAgent.__init__
-#TetrisRaceQLearningAgent.choose_action
-#TetrisRaceQLearningAgent.act
-#TetrisRaceQLearningAgent.check_state_exist
-#Controller.__init__
-#Controller.run_agent
-#Regression.__init__
-
+# TetrisRaceQLearningAgent.__init__
+# TetrisRaceQLearningAgent.choose_action
+# TetrisRaceQLearningAgent.act
+# TetrisRaceQLearningAgent.check_state_exist
+# Controller.__init__
+# Controller.run_agent
+# Regression.__init__
 
 class TetrisRaceQLearningAgent:
-    def __init__(self,env,learning_rate = 0.5, discount_factor =0.5,
-                 exploration_rate =0.5, exploration_decay_rate =0.5):
+    def __init__(self, env, learning_rate=0.5, discount_factor=0.4,
+                 exploration_rate=0.5, exploration_decay_rate=0.5):
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
         self.exploration_rate = exploration_rate
         self.exploration_decay_rate = exploration_decay_rate
         self.actions = env.unwrapped.actions
-        self._num_actions = len(self.actions)
-        self.state = None
-        self.action = None
-
+        # self._num_actions = len(self.actions)
+        self.q_memory = QMemory()
+        self.track = Track()
         # =============== TODO: Your code here ===============
         #  We'll use tabular Q-Learning in our agent, which means
         #  we need to allocate a Q - Table.Think about what exactly
@@ -45,11 +45,7 @@ class TetrisRaceQLearningAgent:
         #  represented as one single integer value (simplest option) and weights
         #  of each action, which agent can do in current env.
 
-        self.wall_iterator = env.unwrapped.wall_iterator # passed walls counter
-
-        print('passed counter walls = ',self.wall_iterator);
-
-        self.q_table = None
+        self.wall_iterator = env.unwrapped.wall_iterator  # passed walls counter
 
     def choose_action(self, observation):
         # =============== TODO: Your code here ===============
@@ -58,10 +54,17 @@ class TetrisRaceQLearningAgent:
         #  agent behavior in unknown world conditions and main motivation is explore world.
         #  Exploitation rate - choose already known actions and moving through known states.
         #  Think about right proportion that parameters for better solution
-        self.check_state_exist(observation)
-
-        action = np.random.choice(self.actions)
-        #action =0
+        # print('observation= ',observation);
+        action = np.random.choice(self.actions);
+        qState = QState(observation, -1)
+        isQStateInMemory = self.q_memory.find(qState)
+        if (isQStateInMemory):
+            qState = isQStateInMemory
+            if (qState.getWeightActL() < qState.getWeightActR()):
+                action = 1
+            else:
+                if (qState.getWeightActL() > qState.getWeightActR()):
+                    action = 0
         return action
 
     def act(self, state, action, reward, state_):
@@ -72,21 +75,91 @@ class TetrisRaceQLearningAgent:
         #  'Q-value' can become 'better' or 'worsen'. So,
         #   an agent can update knowledge about env, updating Q-table.
         #   Remember that agent should choose max of Q-value in  each step
-        print('state ', state)
-        self.q_table = None
+        # print('reward=>',reward)
+        if(reward==0):
+            is_state_ = QState(state_, -1)
+            q_state_ = self.q_memory.find(is_state_)
+            if(q_state_):
+                if((q_state_.getWeightActL()<0) and (q_state_.getWeightActR()<0)):
+                    is_state = QState(state,action)
+                    q_state = self.q_memory.find(is_state)
+                    if(q_state):
+                        if(action==0):
+                            q_state.setWeightActL(-1)
+                        else:
+                            q_state.setWeightActR(-1)
+            else:
+                self.q_memory.remember(QState(state,action,reward))
+        else:
+            # print(state[1])
+            is_state =QState(state,action,reward)
+            q_state = self.q_memory.find(is_state)
+            if(q_state):
+                print('is Fatall algoritm')
+                pass
+            else:
+                q_state=is_state
+                q_state.setWeightActR(-1)
+                q_state.setWeightActL(-1)
+                pr_state=self.q_memory.getParentRight(q_state)
+                pl_state=self.q_memory.getParentLeft(q_state)
+                pr_state.setWeightActL(-1)
+                pr_state.setWeightActR(-1)
 
-        return self.q_table
+                pl_state.setWeightActR(-1)
+                pl_state.setWeightActL(-1)
+                if(action==1):
+                    p_state= self.q_memory.getParentLeft(pr_state)
+                    p_state.setWeightActR(-1)
+                    print(p_state.toString())
+                else:
+                    p_state = self.q_memory.getParentRight(pl_state)
+                    p_state.setWeightActL(-1)
+                    print(p_state.toString())
+                self.q_memory.remember(q_state)
 
-    def check_state_exist(self, state):
-        # =============== TODO: Your code here ===============
-        #  Here agent can write to Q-table new data vector if current
-        #  state is unknown for the moment
-        self.q_table=state[0]
-        pass
+
+def dowWeidhtAct(self, q_state, level):
+        if (level == 0):
+            return True
+        else:
+            WAL = self.q_memory.getParentLeft(q_state)
+            if (WAL):
+                WAL.reward -= (level * 2)
+                WAL.setWeightActL(WAL.getWeightActL() - (level * 2))
+                WAL.setWeightActR(WAL.getWeightActR() - (level * 2))
+                self.dowWeidhtAct(WAL, level - 1)
+            WAR = self.q_memory.getParentRight(q_state)
+            if (WAR):
+                WAR.reward -= (level * 2)
+                WAR.setWeightActL(WAR.getWeightActL() - (level * 2))
+                WAR.setWeightActR(WAR.getWeightActR() - (level * 2))
+                self.dowWeidhtAct(WAR, level - 1)
+
+                # def check_state_exist(self, state, action=-1):
+                #     # =============== TODO: Your code here ===============
+                #     #  Here agent can write to Q-table new data vector if current
+                #     #  state is unknown for the moment
+                #     # for stObjt in self.q_memory:
+                #     #     if stObjt[0][0]==state[0] and  stObjt[1] == self.action :
+                #     #         return stObjt
+                #     if(action==-1):
+                #         action=self.action
+                #     for item in self.q_memory:
+                #         if item.getStateX()==state[0] and item.getStateY() == state[1]: #and item.action==action
+                #             return item
+                #     return False
+                #
+                # def getStatesByY(self,Y):
+                #     arr=[]
+                #     for item in self.q_memory:
+                #         if item.getStateY()==Y:
+                #             arr.append(item)
+                #     return arr
 
 
 class EpisodeHistory:
-    def __init__(self,env,
+    def __init__(self, env,
                  learn_rate,
                  discount,
                  capacity,
@@ -132,7 +205,7 @@ class EpisodeHistory:
         self.point_plot, = plt.plot([], [], linewidth=2.0, c="#1d619b")
         self.mean_plot, = plt.plot([], [], linewidth=3.0, c="#df3930")
         for i in range(0, self.lvl_num):
-            self.level_plots.append(plt.plot([],[], linewidth =1.0, c="#207232",ls ='--'))
+            self.level_plots.append(plt.plot([], [], linewidth=1.0, c="#207232", ls='--'))
 
     def update_plot(self, episode_index):
         plot_right_edge = episode_index
@@ -146,7 +219,7 @@ class EpisodeHistory:
         self.ax.set_xlim(plot_left_edge, plot_left_edge + self.plot_episode_count)
 
         # Update levels plots
-        for i in range(1, self.lvl_num+1):
+        for i in range(1, self.lvl_num + 1):
             xl = range(plot_left_edge, plot_right_edge)
             yl = np.zeros(len(xl))
             yl[:] = i * self.lvl_step
@@ -168,7 +241,7 @@ class EpisodeHistory:
 
         # Repaint the surface.
         plt.draw()
-        plt.pause(0.0001)
+        plt.pause(0.001)
 
     def is_goal_reached(self, episode_index):
         ''' DO NOT CHANGE THIS FUNCTION CODE.'''
@@ -177,20 +250,49 @@ class EpisodeHistory:
         avg = np.average(arr)
         if self.difficulty == 'Easy':
             answer = avg >= self.goal_avg_episode_length + 0.5
-        elif len(arr)>0:
+        elif len(arr) > 0:
             density = 2 * np.max(arr) * np.min(arr) / (np.max(arr) + np.min(arr))
             answer = avg >= self.goal_avg_episode_length + 0.5 and density >= avg
 
         return answer
 
 
+def indexEpisode():
+    try:
+        indexEpisode.a += 1
+    except AttributeError:
+        indexEpisode.a = 0
+    return indexEpisode.a
+
+
 class Controller:
-    def __init__(self, parent_mode = True , episodes_num = 10000, global_env = []):
-        self.team_name =  team_name
+    def saveQmemoryInFile(q_memory):
+        file = open('./logQmemmory__.txt', 'a')
+        file.write('File be update: ' + str(datetime.now()) + " -- \n")
+        index = indexEpisode()
+        if (index == 0):
+            file.write("\n")
+            file.write("+++++++++++++++++++++\n")
+            file.write("\n")
+        file.write('new Episode\n')
+        i = 0
+        while i > (-100000):
+            arr = q_memory.getAllStateWhereY(i)
+            if (not arr):
+                break;
+            file.write('_____ Y __ =>' + str(i) + ' ---count state---=>' + str(len(arr)) + '\n')
+            for item in arr:
+                file.write(item.toString() + ' episode= ' + str(index) + '\n')
+            i -= 1
+        file.close()
+
+    def __init__(self, parent_mode=True, episodes_num=100000, global_env=[]):
+        self.team_name = team_name
         self.exp_dir = folder + '/' + self.team_name
         random_state = 0
         self.agent_history = []
         self.history_f = True
+        self.episode_index = 0
 
         self.window = 50
 
@@ -211,15 +313,16 @@ class Controller:
             #
             # Best choice will try any of this different options for better understanding and
             # optimizing the solution.
-
             env = gym.make(env_name)
-            env.__init__(walls_num=6, walls_spread=10, episodes_to_run=episodes_num)
+
+            env.__init__(walls_num=24, walls_spread=16, episodes_to_run=episodes_num, smooth_car_step=10,
+                         car_spawn='Center')
             env.seed(random_state)
             np.random.seed(random_state)
-            lr = 10
-            df = 10
-            exr = 10
-            exrd = 10
+            lr = 20
+            df = 20
+            exr = 20
+            exrd = 20
 
             self.env = gym.wrappers.Monitor(env, self.exp_dir + '/video', force=True, resume=False,
                                             video_callable=self.video_callable)
@@ -280,7 +383,7 @@ class Controller:
 
             while True:
                 action = agent.choose_action(observation)
-                print('action ', action);
+                # print('action ', action)
                 observation_, reward, done, info = env.step(action)  # Perform the action and observe the new state.
 
                 if verbose == True:
@@ -294,11 +397,13 @@ class Controller:
                 observation = observation_
 
                 if done:
+                    self.episode_index += 1
+                    # self.saveQmemoryInFile(agent.q_memory)
                     self.done_manager(self, episode_index, [], [], 'D')
                     if self.done_manager(self, episode_index, [], finish_freq, 'S') and finish_freq[1]:
                         foo = Classification()
                         finish_freq[1] = False
-
+                    # foo = Regression(QDF)
                     episode_history[episode_index] = timestep_index + 1
                     if verbose or episode_index % plot_redraw_frequency == 0:
                         episode_history.update_plot(episode_index)
@@ -373,10 +478,10 @@ class Controller:
 
 
 class Regression:
-    def __init__(self, dataset):
-        # =============== TODO: Your code here ===============
-        # One of subtask. Receives dataset, must return prediction vector
-        print('Hey, sexy mama, wanna kill all humans?')
+    def __init__(self):
+    # =============== TODO: Your code here ===============
+    # One of subtask. Receives dataset, must return prediction vector
+    # print('Hey, sexy mama, wanna kill all humans?')
         pass
 
 
@@ -387,13 +492,14 @@ class Classification:
         pass
 
 
-def main(env, parent_mode = True):
+def main(env, parent_mode=True):
     obj = Controller
-    obj.__init__(obj, parent_mode= parent_mode, global_env= env)
+    obj.__init__(obj, parent_mode=parent_mode, global_env=env)
+
 
 if __name__ == "__main__":
 
     if 'master.py' not in os.listdir('.'):
-        main([],parent_mode=False)
+        main([], parent_mode=False)
     else:
-        main(env,parent_mode)
+        main(env, parent_mode)
